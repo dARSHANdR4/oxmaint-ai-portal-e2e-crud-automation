@@ -1,0 +1,202 @@
+name: E2E CRUD Regression (19 Modules)
+
+# Runs the full 19-module CRUD automation suite against staging, split into
+# 3 sets (Set 1 = Inventory & Assets, Set 2 = Maintenance/Purchasing/Team,
+# Set 3 = Inspection & Shutdown). Headless in CI — headed mode is for local
+# interactive debugging only, never for CI.
+#
+# Wire this to run after every deploy to stg, and treat the final
+# `e2e-gate` job as a required status check before promoting stg -> prod.
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches: [stg]
+  pull_request:
+    branches: [stg]
+
+concurrency:
+  group: e2e-crud-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  BASE_URL: https://app-stg.oxmaint.ai
+  CI: "true"
+
+jobs:
+  set-01-06:
+    name: "Set 1 (01-06): Assets & Inventory"
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: pw-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browser (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run modules 01-06 (Assets, Labour, Parts, Scraps, Stocks, Vendors)
+        run: |
+          npx playwright test \
+            tests/assets-crud.spec.ts \
+            tests/labour-crud.spec.ts \
+            tests/parts-crud.spec.ts \
+            tests/scraps-crud.spec.ts \
+            tests/stocks-crud.spec.ts \
+            tests/vendors-crud.spec.ts \
+            --project=chromium --reporter=list,html,json
+
+      - name: Upload HTML report (set 01-06)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-01-06
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload failure traces/screenshots/videos (set 01-06)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-01-06
+          path: test-results/
+          retention-days: 14
+
+  set-07-12:
+    name: "Set 2 (07-12): Maintenance, Purchasing & Team"
+    needs: set-01-06
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browser (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run modules 07-12 (Maintenance Requests, PM Schedules, Work Orders, Work Permits, Team Management, Purchase Orders)
+        run: |
+          npx playwright test \
+            tests/maintenance-requests-crud.spec.ts \
+            tests/pm-schedules-crud.spec.ts \
+            tests/work-orders-crud.spec.ts \
+            tests/work-permits-crud.spec.ts \
+            tests/team-management-crud.spec.ts \
+            tests/purchase-orders-crud.spec.ts \
+            --project=chromium --reporter=list,html,json
+
+      - name: Upload HTML report (set 07-12)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-07-12
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload failure traces/screenshots/videos (set 07-12)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-07-12
+          path: test-results/
+          retention-days: 14
+
+  set-13-19:
+    name: "Set 3 (13-19): Inspection & Shutdown"
+    needs: set-07-12
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-chromium-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browser (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run modules 13-19 (Demand Parts, Checklist, Inspection Report, Inspection Reminder, Incidents, RCA, Shutdown Plans)
+        run: |
+          npx playwright test \
+            tests/demand-parts-crud.spec.ts \
+            tests/checklist-crud.spec.ts \
+            tests/inspection-report-crud.spec.ts \
+            tests/inspection-reminder-crud.spec.ts \
+            tests/incident-report-crud.spec.ts \
+            tests/rca-crud.spec.ts \
+            tests/shutdown-plans-crud.spec.ts \
+            --project=chromium --reporter=list,html,json
+
+      - name: Upload HTML report (set 13-19)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-13-19
+          path: playwright-report/
+          retention-days: 14
+
+      - name: Upload failure traces/screenshots/videos (set 13-19)
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-13-19
+          path: test-results/
+          retention-days: 14
+
+  e2e-gate:
+    name: "E2E Gate (all 19 modules green)"
+    needs: [set-01-06, set-07-12, set-13-19]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mark pipeline green
+        run: |
+          echo "## ✅ E2E CRUD Regression — All 3 sets passed" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Set | Modules | Status |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 1 (01-06) | Assets, Labour, Parts, Scraps, Stocks, Vendors | ✅ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 2 (07-12) | Maintenance Requests, PM Schedules, Work Orders, Work Permits, Team Management, Purchase Orders | ✅ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| 3 (13-19) | Demand Parts, Checklist, Inspection Report, Inspection Reminder, Incidents, RCA, Shutdown Plans | ✅ |" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Safe to promote stg -> production." >> "$GITHUB_STEP_SUMMARY"
