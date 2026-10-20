@@ -92,3 +92,10 @@ npm test
 ## Note
 
 Real staging credentials, session storage, and generated reports are intentionally excluded — see `.env.example` for what's required to run this against a live staging environment.
+
+
+## Copyright and permissions
+
+Copyright © 2026 dARSHANdR4. All rights reserved.
+
+Unless otherwise stated, original project code and assets are reserved and no open-source licence is granted. Third-party materials remain subject to their respective licences. See [COPYRIGHT](./COPYRIGHT) for the full notice.
